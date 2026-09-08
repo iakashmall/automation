@@ -2,10 +2,10 @@ name: Daily GitHub Activity Bot
 
 on:
   schedule:
-    - cron: '0 4 * * *'   # Runs at 9:30 AM IST — starts the commit window
-    - cron: '30 7 * * *'  # Runs at 1:00 PM IST — mid-day push
-    - cron: '0 12 * * *'  # Runs at 5:30 PM IST — end of day push
-  workflow_dispatch:
+    - cron: '30 4 * * *'   # 10:00 AM IST
+    - cron: '0 9 * * *'    # 2:30 PM IST
+    - cron: '30 12 * * *'  # 6:00 PM IST
+  workflow_dispatch:        # Manual trigger — always commits
 
 jobs:
   commit:
@@ -29,7 +29,7 @@ jobs:
           python3 << 'EOF'
           import subprocess
           import random
-          import time
+          import os
           from datetime import datetime
 
           messages = [
@@ -45,9 +45,17 @@ jobs:
             "fix: correct typo in comments",
           ]
 
-          # Each run makes 1 commit, but 3 runs/day = 2-3 commits total
-          # Add slight randomness: 70% chance to commit (skips ~1 run occasionally)
-          if random.random() < 0.85:
+          # Check if manually triggered or scheduled
+          event = os.environ.get("GITHUB_EVENT_NAME", "schedule")
+          is_manual = event == "workflow_dispatch"
+
+          # Manual = always commit 2-3 times
+          # Scheduled = 85% chance (natural randomness)
+          num_commits = random.randint(2, 3) if is_manual else (random.randint(1, 2) if random.random() < 0.85 else 0)
+
+          print(f"Event: {event} | Commits planned: {num_commits}")
+
+          for i in range(num_commits):
             msg = random.choice(messages)
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -55,13 +63,11 @@ jobs:
               f.write(f"{timestamp} — {msg}\n")
 
             subprocess.run(["git", "add", "daily_log.txt"])
-            subprocess.run(["git", "commit", "-m", msg])
+            subprocess.run(["git", "commit", "-m", f"{msg}"])
 
-            # Random small delay (1-45 seconds) to vary exact commit time
-            time.sleep(random.randint(1, 45))
-
+          if num_commits > 0:
             subprocess.run(["git", "push"])
-            print(f"✅ Committed: {msg}")
+            print(f"✅ Pushed {num_commits} commit(s)")
           else:
-            print("⏭️ Skipped this run (randomized)")
+            print("⏭️ Skipped this scheduled run")
           EOF
