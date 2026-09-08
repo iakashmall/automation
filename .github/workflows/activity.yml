@@ -2,7 +2,9 @@ name: Daily GitHub Activity Bot
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # Runs every day at 2:00 AM UTC (7:30 AM IST)
+    - cron: '0 4 * * *'   # Runs at 9:30 AM IST — starts the commit window
+    - cron: '30 7 * * *'  # Runs at 1:00 PM IST — mid-day push
+    - cron: '0 12 * * *'  # Runs at 5:30 PM IST — end of day push
   workflow_dispatch:
 
 jobs:
@@ -22,9 +24,44 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Make daily commit
+      - name: Make randomized commits
         run: |
-          echo "Daily update: $(date '+%Y-%m-%d %H:%M:%S')" >> daily_log.txt
-          git add daily_log.txt
-          git commit -m "chore: daily update $(date '+%Y-%m-%d')"
-          git push
+          python3 << 'EOF'
+          import subprocess
+          import random
+          import time
+          from datetime import datetime
+
+          messages = [
+            "fix: resolve minor bug in logic",
+            "chore: update dependencies",
+            "refactor: clean up unused code",
+            "docs: improve readme clarity",
+            "feat: add minor utility function",
+            "style: format code consistently",
+            "test: update test descriptions",
+            "perf: optimize loop performance",
+            "chore: sync daily log",
+            "fix: correct typo in comments",
+          ]
+
+          # Each run makes 1 commit, but 3 runs/day = 2-3 commits total
+          # Add slight randomness: 70% chance to commit (skips ~1 run occasionally)
+          if random.random() < 0.85:
+            msg = random.choice(messages)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            with open("daily_log.txt", "a") as f:
+              f.write(f"{timestamp} — {msg}\n")
+
+            subprocess.run(["git", "add", "daily_log.txt"])
+            subprocess.run(["git", "commit", "-m", msg])
+
+            # Random small delay (1-45 seconds) to vary exact commit time
+            time.sleep(random.randint(1, 45))
+
+            subprocess.run(["git", "push"])
+            print(f"✅ Committed: {msg}")
+          else:
+            print("⏭️ Skipped this run (randomized)")
+          EOF
